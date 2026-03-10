@@ -268,22 +268,16 @@ def sort_class_body(
     # stable sort and sorting by category only.
     sorted_chunks = sorted(chunks, key=lambda c: c.category)
 
-    # Already sorted?
-    if all(a is b for a, b in zip(chunks, sorted_chunks)):
-        return source
-
     # ------------------------------------------------------------------
     # Reassemble with canonical spacing:
-    #   same category  → 1 blank line between members
-    #   diff category  → 2 blank lines between members
+    #   1 blank line between members (independent of category)
     # ------------------------------------------------------------------
     new_body_lines: list[str] = []
     prev_cat: Category | None = None
 
     for chunk in sorted_chunks:
         if prev_cat is not None:
-            blank_count = 2 if chunk.category != prev_cat else 1
-            new_body_lines.extend(["\n"] * blank_count)
+            new_body_lines.append("\n")
 
         new_body_lines.extend(chunk.lines)
         # Guarantee trailing newline

@@ -240,11 +240,10 @@ class TestBlankLines:
             def a(self) -> None: pass
         """
 
-    def test_two_blank_lines_between_categories(self):
+    def test_one_blank_line_between_categories(self):
         result = sort(self.SOURCE)
         lines = result.splitlines()
-        # Find transition from instance-var block to init/method block
-        # There should be at least one pair of consecutive blank lines
+        # Canonical spacing uses one blank line between all members.
         blank_runs = []
         run = 0
         for line in lines:
@@ -254,7 +253,9 @@ class TestBlankLines:
                 if run:
                     blank_runs.append(run)
                 run = 0
-        assert max(blank_runs) >= 2, "Expected at least one 2-blank-line gap between categories"
+        assert all(r == 1 for r in blank_runs), (
+            f"Expected single-blank-line gaps between categories, got runs: {blank_runs}"
+        )
 
     def test_one_blank_line_within_category(self):
         source = textwrap.dedent("""\
@@ -284,6 +285,30 @@ class TestBlankLines:
         class_start = next(i for i, l in enumerate(lines) if l.startswith("class Foo"))
         first_body = lines[class_start + 1]
         assert first_body.strip() != "", "Body must not start with a blank line"
+
+    def test_spacing_normalized_even_if_category_order_already_correct(self):
+        source = textwrap.dedent("""\
+            class Foo:
+                x: int
+                y: int
+                @property
+                def z(self) -> int:
+                    return 0
+                def bar(self) -> None:
+                    pass
+            """)
+        result = sort(source)
+        lines = result.splitlines()
+
+        x_idx = next(i for i, l in enumerate(lines) if "x: int" in l)
+        y_idx = next(i for i, l in enumerate(lines) if "y: int" in l)
+        prop_idx = next(i for i, l in enumerate(lines) if "@property" in l)
+        bar_idx = next(i for i, l in enumerate(lines) if "def bar" in l)
+
+        # 1 blank line between all members.
+        assert y_idx - x_idx == 2
+        assert prop_idx - y_idx == 2
+        assert bar_idx - prop_idx == 4
 
 
 class TestIdempotency:
@@ -333,6 +358,7 @@ class TestAlreadySorted:
 
             class Animal:
                 count: ClassVar[int] = 0
+
                 name: str
 
                 @property
@@ -487,6 +513,7 @@ class TestCLI:
             """\
             class Foo:
                 x: int
+
                 def bar(self): pass
             """,
         )

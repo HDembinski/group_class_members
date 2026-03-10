@@ -124,6 +124,8 @@ class MemberChunk:
     """A contiguous block of source lines belonging to one class member."""
 
     category: Category
+    is_class_docstring: bool = False
+    is_nested_class: bool = False
     lines: list[str] = field(default_factory=list)
 
 
@@ -157,6 +159,15 @@ def _member_start(node: ast.stmt) -> int:
 def _member_end(node: ast.stmt) -> int:
     """Last source line of *node* (1-based, inclusive)."""
     return node.end_lineno  # type: ignore[attr-defined]
+
+
+def _is_class_docstring(node: ast.stmt) -> bool:
+    """Return True if *node* is a class-level docstring expression."""
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
 
 
 def _build_chunks(
@@ -207,7 +218,7 @@ def _build_chunks(
     chunks: list[MemberChunk] = []
     prev_source_end = class_header_end  # 1-based line of previous member's last line
 
-    for primary, docstr in grouped:
+    for idx, (primary, docstr) in enumerate(grouped):
         start = _member_start(primary)
         end = _member_end(docstr if docstr is not None else primary)
 
@@ -223,6 +234,8 @@ def _build_chunks(
         chunks.append(
             MemberChunk(
                 category=categorize(primary),
+                is_class_docstring=(idx == 0 and _is_class_docstring(primary)),
+                is_nested_class=isinstance(primary, ast.ClassDef),
                 lines=member_lines,
             )
         )
@@ -270,20 +283,25 @@ def sort_class_body(
 
     # ------------------------------------------------------------------
     # Reassemble with canonical spacing:
-    #   1 blank line between members (independent of category)
+    #   - no blank line between adjacent attributes
+    #   - 1 blank line between all other adjacent members
     # ------------------------------------------------------------------
     new_body_lines: list[str] = []
-    prev_cat: Category | None = None
+    prev_chunk: MemberChunk | None = None
 
     for chunk in sorted_chunks:
-        if prev_cat is not None:
-            new_body_lines.append("\n")
+        if prev_chunk is not None:
+            attr_cats = {Category.CLASS_VAR, Category.INSTANCE_VAR}
+            if prev_chunk.is_class_docstring or prev_chunk.is_nested_class:
+                new_body_lines.append("\n")
+            elif not (prev_chunk.category in attr_cats and chunk.category in attr_cats):
+                new_body_lines.append("\n")
 
         new_body_lines.extend(chunk.lines)
         # Guarantee trailing newline
         if new_body_lines and not new_body_lines[-1].endswith("\n"):
             new_body_lines[-1] += "\n"
-        prev_cat = chunk.category
+        prev_chunk = chunk
 
     # Splice into the full file.
     # body[0].lineno - 1  → 0-based index of first member line

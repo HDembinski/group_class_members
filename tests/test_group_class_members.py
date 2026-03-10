@@ -279,6 +279,46 @@ class TestBlankLines:
             f"Expected only single blank lines within a category, got runs: {blank_runs}"
         )
 
+    def test_no_blank_line_between_attributes(self):
+        source = textwrap.dedent("""\
+            class Foo:
+                x: int
+                y: int
+                z: int = 0
+            """)
+        result = sort(source)
+        lines = result.splitlines()
+        x_idx = next(i for i, l in enumerate(lines) if "x: int" in l)
+        y_idx = next(i for i, l in enumerate(lines) if "y: int" in l)
+        z_idx = next(i for i, l in enumerate(lines) if "z: int = 0" in l)
+        assert y_idx - x_idx == 1
+        assert z_idx - y_idx == 1
+
+    def test_blank_line_after_class_docstring(self):
+        source = textwrap.dedent('''\
+            class Foo:
+                """Doc."""
+                x: int
+            ''')
+        result = sort(source)
+        lines = result.splitlines()
+        doc_idx = next(i for i, l in enumerate(lines) if '"""Doc."""' in l)
+        x_idx = next(i for i, l in enumerate(lines) if "x: int" in l)
+        assert x_idx - doc_idx == 2
+
+    def test_blank_line_after_nested_class(self):
+        source = textwrap.dedent("""\
+            class Outer:
+                class Inner:
+                    x: int
+                y: int
+            """)
+        result = sort(source)
+        lines = result.splitlines()
+        inner_idx = next(i for i, l in enumerate(lines) if "class Inner" in l)
+        y_idx = next(i for i, l in enumerate(lines) if "y: int" in l)
+        assert y_idx - inner_idx == 3
+
     def test_no_leading_blank_lines_in_body(self):
         result = sort(self.SOURCE)
         lines = result.splitlines()
@@ -305,8 +345,8 @@ class TestBlankLines:
         prop_idx = next(i for i, l in enumerate(lines) if "@property" in l)
         bar_idx = next(i for i, l in enumerate(lines) if "def bar" in l)
 
-        # 1 blank line between all members.
-        assert y_idx - x_idx == 2
+        # No blank line between attributes, 1 blank line otherwise.
+        assert y_idx - x_idx == 1
         assert prop_idx - y_idx == 2
         assert bar_idx - prop_idx == 4
 
@@ -358,7 +398,6 @@ class TestAlreadySorted:
 
             class Animal:
                 count: ClassVar[int] = 0
-
                 name: str
 
                 @property

@@ -32,10 +32,10 @@ class Category(IntEnum):
 
     CLASS_VAR = auto()  # ClassVar[...] or bare assignment at class level
     INSTANCE_VAR = auto()  # Bare annotation without value: x: int
+    PROPERTY = auto()  # @property, @x.setter, @x.deleter
     INIT_NEW = auto()  # __init__, __new__
     DUNDER = auto()  # Other __foo__ methods
     CLASS_STATIC = auto()  # @classmethod, @staticmethod
-    PROPERTY = auto()  # @property, @x.setter, @x.deleter
     PUBLIC_METHOD = auto()  # def foo(...)
     PRIVATE_METHOD = auto()  # def _foo(...)
     MANGLED_METHOD = auto()  # def __foo (no trailing __)
@@ -71,9 +71,7 @@ def categorize(node: ast.stmt) -> Category:
     if isinstance(node, ast.AnnAssign):
         if _is_classvar(node.annotation):
             return Category.CLASS_VAR
-        if node.value is None:
-            return Category.INSTANCE_VAR
-        return Category.CLASS_VAR  # x: int = 0 → treat as class var
+        return Category.INSTANCE_VAR
 
     # --- Plain assignments: x = value  (class-level) ---
     if isinstance(node, ast.Assign):
@@ -126,7 +124,6 @@ class MemberChunk:
     """A contiguous block of source lines belonging to one class member."""
 
     category: Category
-    sort_key: str  # secondary sort within a category
     lines: list[str] = field(default_factory=list)
 
 
@@ -148,19 +145,6 @@ def _is_attr_docstring(node: ast.stmt, prev: ast.stmt | None) -> bool:
     if not isinstance(node.value.value, str):
         return False
     return isinstance(prev, (ast.AnnAssign, ast.Assign))
-
-
-def _sort_key(node: ast.stmt) -> str:
-    """Secondary alphabetical sort key within a category."""
-    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        return node.target.id
-    if isinstance(node, ast.Assign):
-        t = node.targets[0]
-        if isinstance(t, ast.Name):
-            return t.id
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return node.name
-    return ""
 
 
 def _member_start(node: ast.stmt) -> int:
@@ -239,7 +223,6 @@ def _build_chunks(
         chunks.append(
             MemberChunk(
                 category=categorize(primary),
-                sort_key=_sort_key(primary),
                 lines=member_lines,
             )
         )
@@ -281,7 +264,9 @@ def sort_class_body(
 
     chunks = _build_chunks(body, all_lines, class_header_end)
 
-    sorted_chunks = sorted(chunks, key=lambda c: (c.category, c.sort_key))
+    # Keep the original order within each category by relying on Python's
+    # stable sort and sorting by category only.
+    sorted_chunks = sorted(chunks, key=lambda c: c.category)
 
     # Already sorted?
     if all(a is b for a, b in zip(chunks, sorted_chunks)):

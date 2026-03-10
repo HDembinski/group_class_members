@@ -100,12 +100,12 @@ class TestBasicOrdering:
         speak_idx = next(i for i, l in enumerate(lines) if "def speak" in l)
         assert prop_idx < speak_idx
 
-    def test_classmethod_before_property(self):
+    def test_property_before_classmethod(self):
         result = sort(self.SOURCE)
         lines = result.splitlines()
         cm_idx = next(i for i, l in enumerate(lines) if "@classmethod" in l)
         prop_idx = next(i for i, l in enumerate(lines) if "@property" in l)
-        assert cm_idx < prop_idx
+        assert prop_idx < cm_idx
 
     def test_private_method_after_public(self):
         result = sort(self.SOURCE)
@@ -127,6 +127,39 @@ class TestBasicOrdering:
         repr_idx = next(i for i, l in enumerate(lines) if "def __repr__" in l)
         cm_idx = next(i for i, l in enumerate(lines) if "@classmethod" in l)
         assert repr_idx < cm_idx
+
+    def test_preserve_order_within_same_category(self):
+        source = """\
+            class A:
+                def zeta(self) -> None:
+                    pass
+
+                def alpha(self) -> None:
+                    pass
+
+                def beta(self) -> None:
+                    pass
+            """
+        result = sort(source)
+        lines = result.splitlines()
+        zeta_idx = next(i for i, l in enumerate(lines) if "def zeta" in l)
+        alpha_idx = next(i for i, l in enumerate(lines) if "def alpha" in l)
+        beta_idx = next(i for i, l in enumerate(lines) if "def beta" in l)
+        assert zeta_idx < alpha_idx < beta_idx
+
+    def test_preserve_attribute_order_with_defaults(self):
+        source = """\
+            class A:
+                first: int
+                second: int = 0
+                third: bool = False
+            """
+        result = sort(source)
+        lines = result.splitlines()
+        first_idx = next(i for i, l in enumerate(lines) if "first: int" in l)
+        second_idx = next(i for i, l in enumerate(lines) if "second: int = 0" in l)
+        third_idx = next(i for i, l in enumerate(lines) if "third: bool = False" in l)
+        assert first_idx < second_idx < third_idx
 
     def test_output_is_valid_python(self):
         result = sort(self.SOURCE)
@@ -302,6 +335,10 @@ class TestAlreadySorted:
                 count: ClassVar[int] = 0
                 name: str
 
+                @property
+                def upper(self) -> str:
+                    return self.name.upper()
+
                 def __init__(self, name: str) -> None:
                     self.name = name
 
@@ -311,10 +348,6 @@ class TestAlreadySorted:
                 @classmethod
                 def create(cls, name: str) -> "Animal":
                     return cls(name)
-
-                @property
-                def upper(self) -> str:
-                    return self.name.upper()
 
                 def speak(self) -> None:
                     pass

@@ -19,6 +19,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+group_class_members = "group_class_members.main:main"
+
 [project.urls]
 Homepage = "https://hdembinski.github.io/"
 
